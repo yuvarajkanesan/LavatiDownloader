@@ -1,0 +1,26 @@
+Lavati Downloader includes the following third-party components.
+
+PySide6 / Qt for Python  (Qt libraries bundled in the application folder)
+  Licensed under the GNU LGPL v3. The Qt libraries are shipped as separate DLLs in the install folder,
+  so you may replace them with your own build. https://www.qt.io/licensing  https://doc.qt.io/qtforpython-6/
+
+requests  (Apache License 2.0)       https://github.com/psf/requests
+platformdirs  (MIT License)          https://github.com/tox-dev/platformdirs
+
+Python  (runtime bundled by PyInstaller)
+  Python Software Foundation License, https://docs.python.org/3/license.html
+
+PyInstaller  (build tool; its bootloader is embedded in the executable)
+  GPL-2.0-or-later with the PyInstaller bootloader exception, which permits distributing
+  executables built with it under any licence. https://pyinstaller.org
+
+yt-dlp  (video and social site downloads)
+  Unlicense (public domain dedication). https://github.com/yt-dlp/yt-dlp
+
+FFmpeg  (bundled through imageio-ffmpeg; joins separate audio and video streams and converts audio to MP3)
+  The bundled build is licensed under the GNU GPL v3 and runs as a separate program; Lavati Downloader only
+  starts it. Source code and licence: https://ffmpeg.org/download.html  https://github.com/imageio/imageio-ffmpeg
+
+JetBrains Mono  (idm\gui\fonts)
+  Copyright (c) JetBrains s.r.o. Licensed under the SIL Open Font License, Version 1.1.
+  https://github.com/JetBrains/JetBrainsMono   License text: https://openfontlicense.org

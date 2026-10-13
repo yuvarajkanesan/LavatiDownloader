@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Lavati Downloader",
+  "version": "0.2.0",
+  "description": "Send videos and file downloads from your browser to Lavati Downloader.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmZhIgj/t802VRBCZINX0FMMzMPxy2ZeF35roEsjGVtIeoAv/PKkwC4p2+qBxwHzPH3Pqox5aVD2fBRE8YZVq+1GU5m8YfdevzdczaFZ0X8XluuMCVBqd4AgI6AkOp4KxxW076X4MEZVz9q21pJ1Fi0F2lWeVJElar3bTRF7daUh26vV4q3ySwXxVx22fqlYmSowhH5mf4/n+k2KB8ka7YLWa3mBA4C6qKryyTdck0upo1E3I4Pbq00+Yh81RyzT2iuSbohbkpwsaBCZRqFqYFHB1BCfXZDJrFPeIiF3iX4E0Lmd+9p0TewCoypznFcfe2xazLcWUYBPEUKYqgtktSQIDAQAB",
+  "permissions": ["nativeMessaging", "downloads", "contextMenus"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.youtube.com/*", "*://youtu.be/*", "*://*.instagram.com/*", "*://*.facebook.com/*",
+        "*://*.tiktok.com/*", "*://x.com/*", "*://*.x.com/*", "*://twitter.com/*", "*://*.twitter.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "action": { "default_title": "Send this page to Lavati Downloader" }
+}

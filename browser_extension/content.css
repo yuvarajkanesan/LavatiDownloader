@@ -1,0 +1,15 @@
+#idm-download-button {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 2147483647;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #2f6fed;
+  color: #fff;
+  font: 600 14px/1 "Segoe UI", system-ui, sans-serif;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+#idm-download-button:hover { background: #1a56d6; }

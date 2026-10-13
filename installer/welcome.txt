@@ -1,0 +1,7 @@
+Lavati Downloader speeds up your downloads by splitting each file into several connections, and lets you pause and resume them, even after restarting your PC.
+
+It also saves videos from YouTube, Instagram, Facebook, TikTok and X in the quality you choose, runs your queue on a schedule, and can pick up downloads from Chrome and Edge. Copied links are detected so you can add them in one click.
+
+If Lavati Downloader is already installed, this setup updates it and keeps your downloads, settings and history.
+
+Lavati Downloader is free and open source (MIT license), for personal and commercial use, with no registration and no ads. If it saves you time, please consider supporting its development (see the last page of this setup).
