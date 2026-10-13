@@ -142,7 +142,7 @@ QPushButton#navItem:checked {{
     background: {BACKGROUND};
     border: 1px solid {BORDER};
     border-radius: 7px;
-    padding: 3px 8px;
+    padding: 3px 6px;
     font-size: 12px;
 }}
 

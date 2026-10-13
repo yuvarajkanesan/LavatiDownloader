@@ -7,9 +7,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import (
-    QAbstractItemView, QApplication, QButtonGroup, QFrame, QHBoxLayout, QHeaderView, QLabel,
+    QAbstractItemView, QApplication, QButtonGroup, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLabel,
     QLineEdit, QMainWindow, QMenu, QMessageBox, QPushButton, QStackedWidget, QTableView, QVBoxLayout, QWidget,
 )
 
@@ -19,6 +19,7 @@ from idm.core.events import DownloadEvent
 from idm.core.queue_manager import DownloadManager
 from idm.core.scheduler import DownloadScheduler
 from idm.core.schedule import QueueScheduler, ScheduleConfig, perform_finish_action
+from idm.core.torrent import is_magnet, load_backend
 from idm.core.video import SITES
 from idm.gui import autostart, theme
 from idm.gui.add_download_dialog import AddDownloadDialog
@@ -34,8 +35,9 @@ from idm.gui.icons import make_app_icon
 from idm.gui.ipc_server import IpcServer
 from idm.gui.material_icons import get_icon
 from idm.gui.settings_page import SettingsPage, get_setting, video_defaults
+from idm.gui.torrents_page import GROUPS, TorrentsPage
 from idm.gui.tray import TrayController
-from idm.gui.widgets import ElidedLabel, NavButton, SegmentBar, card, chip, muted
+from idm.gui.widgets import ElidedLabel, NavButton, SegmentBar, SegmentedControl, card, chip, muted
 from idm.storage.models import DownloadRecord, DownloadStatus
 from idm.storage.paths import default_downloads_root
 from idm.storage.repository import DownloadRepository
@@ -57,7 +59,13 @@ TYPE_ITEMS = [
     ("Programs", "apps", None, "Programs"),
 ]
 NAV_ITEMS = LIBRARY_ITEMS + TYPE_ITEMS
-PAGE_DOWNLOADS, PAGE_SETTINGS = 0, 1
+TORRENT_ITEMS = [
+    ("All torrents", "grid", None),
+    ("Downloading", "download", "downloading"),
+    ("Seeding", "upload", "seeding"),
+    ("Paused", "pause", "paused"),
+]
+PAGE_DOWNLOADS, PAGE_SETTINGS, PAGE_TORRENTS = 0, 1, 2
 
 
 class _Notifier(QObject):
@@ -71,7 +79,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Lavati Downloader")
         self.setWindowIcon(make_app_icon())
-        self.resize(1180, 760)
+        self.resize(1240, 760)
         self.setMinimumSize(900, 560)
 
         self._repo = repo
@@ -100,6 +108,9 @@ class MainWindow(QMainWindow):
         self._bridge.event_received.connect(self._on_engine_event)
         self._manager.add_listener(self._bridge.listener)
 
+        self._torrents = load_backend()
+        self._mode = "downloads"
+        self._torrent_totals = (0, 0, 0)
         self._model = DownloadsTableModel(self)
         self._proxy = DownloadsFilterProxy(self)
         self._proxy.setSourceModel(self._model)
@@ -117,7 +128,12 @@ class MainWindow(QMainWindow):
         self._queue_schedule.start()
         self._clipboard_monitor.start()
         self._ipc.start()
+        self._torrent_timer = QTimer(self)
+        self._torrent_timer.setInterval(1000)
+        self._torrent_timer.timeout.connect(self._refresh_torrents)
+        self._torrent_timer.start()
         self._refresh_all()
+        self._refresh_torrents()
 
         self._notified_first_tray_hide = False
 
@@ -133,14 +149,23 @@ class MainWindow(QMainWindow):
         body = QHBoxLayout()
         body.setContentsMargins(0, 0, 0, 0)
         body.setSpacing(0)
+        self._sidebar_stack = QStackedWidget()
+        self._sidebar_stack.setFixedWidth(224)
         self._sidebar = self._build_sidebar()
-        body.addWidget(self._sidebar)
+        self._sidebar_stack.addWidget(self._sidebar)
+        self._sidebar_stack.addWidget(self._build_torrent_sidebar())
+        body.addWidget(self._sidebar_stack)
         self._pages = QStackedWidget()
         self._pages.addWidget(self._build_downloads_page())
         self._settings_page = SettingsPage(self._repo)
         self._settings_page.changed.connect(self._on_setting_changed)
         self._settings_page.back_requested.connect(self._show_downloads)
         self._pages.addWidget(self._settings_page)
+        self._torrents_page = TorrentsPage()
+        self._torrents_page.action_requested.connect(self._on_torrent_action)
+        self._torrents_page.resume_all.connect(lambda: self._torrent_bulk("resume"))
+        self._torrents_page.pause_all.connect(lambda: self._torrent_bulk("pause"))
+        self._pages.addWidget(self._torrents_page)
         body.addWidget(self._pages, 1)
         root.addLayout(body, 1)
         self.setCentralWidget(central)
@@ -161,6 +186,9 @@ class MainWindow(QMainWindow):
         layout.addWidget(logo)
         layout.addWidget(title)
         layout.addSpacing(14)
+        self._mode_tabs = SegmentedControl([("downloads", "Downloads"), ("torrents", "Torrents")])
+        self._mode_tabs.changed.connect(self._set_mode)
+        layout.addWidget(self._mode_tabs)
 
         link_bar = QFrame()
         link_bar.setObjectName("linkBar")
@@ -188,7 +216,15 @@ class MainWindow(QMainWindow):
         settings.setCursor(Qt.PointingHandCursor)
         settings.setFixedHeight(40)
         settings.clicked.connect(lambda checked=False: self._open_settings())
+        self._settings_button = settings
         layout.addWidget(settings)
+        self._open_torrent_button = QPushButton(" Open .torrent file")
+        self._open_torrent_button.setIcon(get_icon("description", color=theme.TEXT, size=16))
+        self._open_torrent_button.setCursor(Qt.PointingHandCursor)
+        self._open_torrent_button.setFixedHeight(40)
+        self._open_torrent_button.clicked.connect(lambda checked=False: self._open_torrent_file())
+        self._open_torrent_button.hide()
+        layout.addWidget(self._open_torrent_button)
         return header
 
     def _build_sidebar(self) -> QWidget:
@@ -215,6 +251,13 @@ class MainWindow(QMainWindow):
         section("LIBRARY", LIBRARY_ITEMS)
         layout.addSpacing(14)
         section("FILE TYPES", TYPE_ITEMS)
+        layout.addSpacing(14)
+        p2p = QLabel("PEER TO PEER")
+        p2p.setObjectName("sectionLabel")
+        layout.addWidget(p2p)
+        self._torrents_nav = NavButton("upload", "Torrents")
+        self._torrents_nav.clicked.connect(lambda checked=False: self._set_mode("torrents"))
+        layout.addWidget(self._torrents_nav)
         layout.addStretch(1)
         self._nav_buttons[0].setChecked(True)
         self._nav_group.idClicked.connect(self._on_nav_clicked)
@@ -234,6 +277,47 @@ class MainWindow(QMainWindow):
             for name in chunk:
                 row.addWidget(chip(name))
             row.addStretch(1)
+            box_layout.addLayout(row)
+        layout.addWidget(box)
+        return side
+
+    def _build_torrent_sidebar(self) -> QWidget:
+        side = QFrame()
+        side.setObjectName("sidebar")
+        layout = QVBoxLayout(side)
+        layout.setContentsMargins(12, 16, 12, 16)
+        layout.setSpacing(2)
+        label = QLabel("TORRENTS")
+        label.setObjectName("sectionLabel")
+        layout.addWidget(label)
+        self._tor_group = QButtonGroup(self)
+        self._tor_buttons: list[NavButton] = []
+        for text, icon, _group in TORRENT_ITEMS:
+            button = NavButton(icon, text)
+            self._tor_group.addButton(button, len(self._tor_buttons))
+            self._tor_buttons.append(button)
+            layout.addWidget(button)
+        self._tor_buttons[0].setChecked(True)
+        self._tor_group.idClicked.connect(self._on_torrent_nav)
+        layout.addStretch(1)
+
+        box = QFrame()
+        box.setObjectName("siteBox")
+        box_layout = QVBoxLayout(box)
+        box_layout.setContentsMargins(14, 12, 14, 12)
+        box_layout.setSpacing(6)
+        self._tor_speed_labels = {}
+        for key, text, icon, color in (("down", "Download", "download", theme.PRIMARY), ("up", "Upload", "upload", "#0F9D8A")):
+            row = QHBoxLayout()
+            icon_label = QLabel()
+            icon_label.setPixmap(get_icon(icon, color=color, size=14).pixmap(14, 14))
+            value = QLabel("0.0 MB/s")
+            value.setObjectName("mono")
+            row.addWidget(icon_label)
+            row.addWidget(QLabel(text))
+            row.addStretch(1)
+            row.addWidget(value)
+            self._tor_speed_labels[key] = value
             box_layout.addLayout(row)
         layout.addWidget(box)
         return side
@@ -339,6 +423,7 @@ class MainWindow(QMainWindow):
         self._status_speed.setObjectName("mono")
         self._status_speed.setStyleSheet(f"color: {theme.TEXT_MUTED};")
         holder = QWidget()
+        holder.setMinimumWidth(380)
         row = QHBoxLayout(holder)
         row.setContentsMargins(14, 0, 0, 0)
         row.setSpacing(8)
@@ -375,11 +460,82 @@ class MainWindow(QMainWindow):
 
     def _open_settings(self) -> None:
         self._pages.setCurrentIndex(PAGE_SETTINGS)
-        self._sidebar.hide()
+        self._sidebar_stack.hide()
 
     def _show_downloads(self) -> None:
-        self._pages.setCurrentIndex(PAGE_DOWNLOADS)
-        self._sidebar.show()
+        self._set_mode(self._mode)
+
+    # -- modes: downloads / torrents ----------------------------------------------
+
+    def _set_mode(self, mode: str) -> None:
+        self._mode = mode
+        torrents = mode == "torrents"
+        if self._mode_tabs.value() != mode:
+            self._mode_tabs.set_value(mode)
+        self._pages.setCurrentIndex(PAGE_TORRENTS if torrents else PAGE_DOWNLOADS)
+        self._sidebar_stack.show()
+        self._sidebar_stack.setCurrentIndex(1 if torrents else 0)
+        self._link_edit.setPlaceholderText("Paste a magnet link" if torrents else "Paste a link to a file, video or playlist")
+        self._add_button.setText("Add" if torrents else " Add")
+        self._add_button.setIcon(QIcon() if torrents else get_icon("add", color="white", size=14))
+        self._settings_button.setVisible(not torrents)
+        self._open_torrent_button.setVisible(torrents)
+        self._refresh_status_bar()
+
+    def _on_torrent_nav(self, index: int) -> None:
+        label, _icon, group = TORRENT_ITEMS[index]
+        self._torrents_page.set_group(group, label)
+
+    def _refresh_torrents(self) -> None:
+        records = self._torrents.snapshot()
+        self._torrents_page.set_records(records)
+        for button, (_label, _icon, group) in zip(self._tor_buttons, TORRENT_ITEMS):
+            button.set_count(len(records) if group is None else sum(1 for r in records if r.state in GROUPS[group]))
+        down = sum(r.down_speed for r in records)
+        up = sum(r.up_speed for r in records)
+        self._tor_speed_labels["down"].setText(f"{format_bytes(down)}/s" if down else "0.0 MB/s")
+        self._tor_speed_labels["up"].setText(f"{format_bytes(up)}/s" if up else "0.0 MB/s")
+        self._torrent_totals = (sum(1 for r in records if r.state.value == "downloading"), down, up)
+        self._torrents_page.set_empty_message(
+            "No torrents here yet. Paste a magnet link above to start one." if self._torrents.available
+            else self._torrents.unavailable_reason)
+        self._torrents_page.update_empty_state()
+        if self._mode == "torrents":
+            self._refresh_status_bar()
+
+    def _torrents_unavailable(self) -> bool:
+        if self._torrents.available:
+            return False
+        QMessageBox.information(self, "Torrents", self._torrents.unavailable_reason)
+        return True
+
+    def _add_magnet(self) -> None:
+        if self._torrents_unavailable():
+            return
+        text = self._link_edit.text().strip()
+        if not is_magnet(text):
+            QMessageBox.information(self, "Magnet link needed", "Paste a magnet link (it starts with magnet:?).")
+            return
+        self._link_edit.clear()
+        self._torrents.add_magnet(text, str(self._downloads_root / "Torrents"))
+        self._refresh_torrents()
+
+    def _open_torrent_file(self) -> None:
+        if self._torrents_unavailable():
+            return
+        path, _filter = QFileDialog.getOpenFileName(self, "Open .torrent file", "", "Torrent files (*.torrent)")
+        if path:
+            self._torrents.add_file(path, str(self._downloads_root / "Torrents"))
+            self._refresh_torrents()
+
+    def _on_torrent_action(self, torrent_id: str, action: str) -> None:
+        getattr(self._torrents, action)(torrent_id)
+        self._refresh_torrents()
+
+    def _torrent_bulk(self, action: str) -> None:
+        for record in self._torrents.snapshot():
+            getattr(self._torrents, action)(record.id)
+        self._refresh_torrents()
 
     # -- counts, status bar, detail card -----------------------------------------
 
@@ -398,6 +554,14 @@ class MainWindow(QMainWindow):
             button.set_count(count)
 
     def _refresh_status_bar(self) -> None:
+        if self._mode == "torrents":
+            count, down, up = self._torrent_totals
+            self._status_dot.setStyleSheet(
+                f"background: {theme.SUCCESS if count else theme.NEUTRAL_LIGHT}; border-radius: 4px;")
+            self._status_active.setText(f"{count} downloading")
+            self._status_speed.setText(f"{format_bytes(down) if down else '0.0 MB'}/s down · "
+                                       f"{format_bytes(up) if up else '0.0 MB'}/s up")
+            return
         rows = [self._model.row_at(self._model.index(i, 0)) for i in range(self._model.rowCount())]
         active = [r for r in rows if r.record.status == DownloadStatus.DOWNLOADING]
         speed = sum(r.speed_bytes_per_sec for r in active)
@@ -450,6 +614,9 @@ class MainWindow(QMainWindow):
     # -- add download --------------------------------------------------------
 
     def _add_from_link_bar(self) -> None:
+        if self._mode == "torrents":
+            self._add_magnet()
+            return
         text = self._link_edit.text().strip()
         self._link_edit.clear()
         self._open_add_dialog(initial_url=extract_first_url(text) or text)

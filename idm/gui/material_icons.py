@@ -200,6 +200,15 @@ def _draw_download(p: QPainter, c: QColor) -> None:
     p.drawLine(QPointF(5, 21), QPointF(19, 21))
 
 
+def _draw_upload(p: QPainter, c: QColor) -> None:
+    _stroke(p, c, 2.2)
+    p.drawLine(QPointF(12, 21), QPointF(12, 10))
+    _fill(p, c)
+    p.drawPolygon(QPolygonF([QPointF(6.5, 11.5), QPointF(17.5, 11.5), QPointF(12, 5.5)]))
+    _stroke(p, c, 2.2)
+    p.drawLine(QPointF(5, 3), QPointF(19, 3))
+
+
 def _draw_history(p: QPainter, c: QColor) -> None:
     _stroke(p, c, 2.0)
     p.drawEllipse(QRectF(3.5, 3.5, 16, 16))
@@ -297,6 +306,7 @@ _DRAWERS: dict[str, Callable[[QPainter, QColor], None]] = {
     "info": _draw_info,
     "search": _draw_search,
     "download": _draw_download,
+    "upload": _draw_upload,
     "history": _draw_history,
     "bolt": _draw_bolt,
     "grid": _draw_grid,

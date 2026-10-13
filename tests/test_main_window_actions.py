@@ -100,3 +100,18 @@ def test_ipc_handler_config_and_add(qapp, tmp_path):
     assert window._handle_ipc({"type": "add", "url": "javascript:alert(1)"})["ok"] is False
     assert window._handle_ipc({"type": "nope"})["ok"] is False
     db.close()
+
+
+def test_torrents_mode_switches_pages_and_explains_missing_engine(qapp, tmp_path):
+    db, window = _make_window(tmp_path)
+    window._mode_tabs._buttons["torrents"].click()
+    assert window._mode == "torrents"
+    assert window._pages.currentWidget() is window._torrents_page
+    assert window._link_edit.placeholderText() == "Paste a magnet link"
+    assert window._torrents_page.empty.isVisibleTo(window._torrents_page)
+    assert "isn't included" in window._torrents_page.empty.text()
+    window._torrents_nav.click()  # the sidebar entry also lands on the Torrents screen
+    assert window._mode == "torrents"
+    window._mode_tabs._buttons["downloads"].click()
+    assert window._pages.currentWidget() is not window._torrents_page
+    db.close()
