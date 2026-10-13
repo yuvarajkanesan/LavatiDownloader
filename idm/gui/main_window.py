@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
-from PySide6.QtGui import QGuiApplication, QIcon
+from PySide6.QtGui import QCursor, QGuiApplication, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QButtonGroup, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLabel,
     QLineEdit, QMainWindow, QMenu, QMessageBox, QPushButton, QStackedWidget, QTableView, QVBoxLayout, QWidget,
@@ -20,11 +20,12 @@ from idm.core.queue_manager import DownloadManager
 from idm.core.scheduler import DownloadScheduler
 from idm.core.schedule import QueueScheduler, ScheduleConfig, perform_finish_action
 from idm.core.torrent import is_magnet, load_backend
-from idm.core.video import SITES
+from idm.core.video import SITES, VideoOptions
 from idm.gui import autostart, theme
 from idm.gui.add_download_dialog import AddDownloadDialog
 from idm.gui.bridge import EngineBridge
 from idm.gui.clipboard_monitor import ClipboardMonitor
+from idm.gui.ffmpeg_prompt import ensure_ffmpeg
 from idm.gui.delegates import ROW_HEIGHT, ActionsDelegate, NameDelegate, ProgressDelegate, TextDelegate
 from idm.gui.downloads_model import (
     COL_ACTIONS, COL_ETA, COL_FILENAME, COL_PROGRESS, COL_SIZE, COL_SPEED, STATUS_LABELS, DownloadsTableModel,
@@ -633,6 +634,8 @@ class MainWindow(QMainWindow):
         result = dialog.result_data()
         if not result.url:
             return
+        if result.kind == "video" and not ensure_ffmpeg(self, VideoOptions.from_json(result.options)):
+            return
         try:
             record = self._manager.add_download(
                 url=result.url, destination_dir=result.destination_dir,
@@ -827,6 +830,14 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, lambda: (self.bring_to_front(), self._open_add_dialog(initial_url=url)))
             return {}
         return {"ok": False, "error": f"unknown request {kind!r}"}
+
+    def center_on_screen(self) -> None:
+        """Put the window in the middle of the screen it will open on (the one under the mouse)."""
+        screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+        area = screen.availableGeometry()
+        frame = self.frameGeometry()
+        frame.moveCenter(area.center())
+        self.move(frame.topLeft())
 
     def bring_to_front(self) -> None:
         self.showNormal()

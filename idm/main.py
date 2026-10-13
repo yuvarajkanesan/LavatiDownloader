@@ -56,6 +56,7 @@ def main() -> int:
         pass  # browser integration is optional; the app works without it
 
     window = MainWindow(repo)
+    window.center_on_screen()  # always open in the middle of the screen
     if not background:
         window.show()
 

@@ -11,7 +11,8 @@ QT_UNUSED = [
     'PySide6.QtMultimedia', 'PySide6.Qt3DCore', 'PySide6.QtCharts', 'PySide6.QtDataVisualization',
     'PySide6.QtSql', 'PySide6.QtTest', 'PySide6.QtDesigner', 'PySide6.QtHelp', 'PySide6.QtPrintSupport',
 ]
-COMMON_EXCLUDES = ['tkinter', 'unittest', 'pydoc', 'doctest', 'pytest', 'test']
+# imageio_ffmpeg only supplies a dev-time copy of ffmpeg; the installed app downloads it on first use
+COMMON_EXCLUDES = ['tkinter', 'unittest', 'pydoc', 'doctest', 'pytest', 'test', 'imageio_ffmpeg']
 
 app = Analysis(
     ['idm/main.py'],

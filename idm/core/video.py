@@ -153,12 +153,14 @@ def fetch_video_info(url: str, timeout: int = 20) -> VideoInfo:
 
 
 def ffmpeg_path() -> str | None:
-    """Bundled ffmpeg (imageio-ffmpeg) so separate audio and video streams can be joined."""
-    try:
-        import imageio_ffmpeg
-        return imageio_ffmpeg.get_ffmpeg_exe()
-    except Exception:  # noqa: BLE001 - absent or unusable: yt-dlp falls back to single-file formats
-        return None
+    """The downloaded ffmpeg (see ffmpeg_tool), or None; yt-dlp then falls back to single-file formats."""
+    from idm.core import ffmpeg_tool
+    return ffmpeg_tool.ffmpeg_path()
+
+
+def needs_ffmpeg(options: VideoOptions) -> bool:
+    """Joining separate streams and extracting MP3 both need ffmpeg."""
+    return options.format == "mp3" or options.join_streams
 
 
 def build_ydl_options(options: VideoOptions, dest_dir: str, connections: int = 8) -> dict:

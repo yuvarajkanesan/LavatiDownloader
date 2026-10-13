@@ -4,4 +4,4 @@ It also saves videos from YouTube, Instagram, Facebook, TikTok and X in the qual
 
 If Lavati Downloader is already installed, this setup updates it and keeps your downloads, settings and history.
 
-Lavati Downloader is free and open source (MIT license), for personal and commercial use, with no registration and no ads. If it saves you time, please consider supporting its development (see the last page of this setup).
+Lavati Downloader is free and open source (MIT license), for personal and commercial use, with no registration and no ads.

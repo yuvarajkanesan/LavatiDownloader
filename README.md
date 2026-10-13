@@ -1,10 +1,13 @@
 # Lavati Downloader
 
+[![tests](https://github.com/yuvarajkanesan/LavatiDownloader/actions/workflows/tests.yml/badge.svg)](https://github.com/yuvarajkanesan/LavatiDownloader/actions)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.txt)
+
 A multi-connection download accelerator built with Python and PySide6 (Windows installer provided). One link bar handles everything: paste a file link, or a YouTube, Instagram, Facebook, TikTok or X link, and the Add download sheet adapts.
 
 ## Features
 
-- **Video and social links** (YouTube, Instagram, Facebook, TikTok, X) through yt-dlp: Video (MP4) or Audio only (MP3), quality from 360p to 2160p with size estimates, subtitles, whole playlists. Separate audio and video streams are joined with a bundled ffmpeg
+- **Video and social links** (YouTube, Instagram, Facebook, TikTok, X) through yt-dlp: Video (MP4) or Audio only (MP3), quality from 360p to 2160p with size estimates, subtitles, whole playlists. Separate audio and video streams are joined with ffmpeg, which the app downloads once on first use (it is not in the installer)
 - **Scheduler**: run the queue between a start and stop time on chosen days, then do nothing, exit, sleep or shut down
 - **Browser integration** (Chrome and Edge): a Download button on video pages and capture of file downloads, through a native-messaging host
 
@@ -66,8 +69,12 @@ Or exercise the engine directly without the GUI:
 (`dist\Lavati Downloader\`, which also contains `idm-native-host.exe`) and, if
 [Inno Setup 6](https://jrsoftware.org/isdl.php) is installed, produces `dist\LavatiDownloader-Setup.exe`.
 Set `SIGN_CERT_SHA1` (or `SIGN_PFX` + `SIGN_PFX_PASSWORD`) first to sign both; see `tools\sign.ps1`.
-`tools\make_installer_assets.py` regenerates the installer images and extension icons. Before releasing, replace the
-placeholder funding link (`FundingUrl` in `installer.iss`, and `.github/FUNDING.yml`).
+`tools\make_installer_assets.py` regenerates the installer images and extension icons.
+
+### ffmpeg release asset
+The installer leaves ffmpeg out (84 MB). `tools/make_ffmpeg_asset.py` builds `dist/ffmpeg-win64.exe.xz` and writes its
+checksum into `idm/core/ffmpeg_tool.py`; attach that file to a GitHub release tagged `ffmpeg-7.1`. Until that release
+exists, saving MP3 or joined-stream video asks to download it and reports that it could not.
 
 ## Browser extension
 
@@ -76,8 +83,17 @@ extensions page, turn on Developer mode, choose *Load unpacked* and pick the `br
 Browser integration > Open extension folder). Its ID is fixed by the `key` in `manifest.json`, which is what the
 host manifest allows.
 
+## Responsible use
+Only download content you own or have permission to save. Video downloads rely on yt-dlp and are subject to each
+site's terms; you are responsible for how you use the app. See [PRIVACY.md](PRIVACY.md) and
+[SECURITY.md](SECURITY.md).
+
+## Contributing and support
+Issues and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
-[MIT](LICENSE.txt). Third-party components: [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
+[MIT](LICENSE.txt), free for personal and commercial use. Third-party components and their licenses:
+[THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt) (note: ffmpeg is GPL and runs as a separate program).
 
 ## Not yet built (stretch goals)
 

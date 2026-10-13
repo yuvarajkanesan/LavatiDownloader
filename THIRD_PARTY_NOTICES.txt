@@ -17,9 +17,9 @@ PyInstaller  (build tool; its bootloader is embedded in the executable)
 yt-dlp  (video and social site downloads)
   Unlicense (public domain dedication). https://github.com/yt-dlp/yt-dlp
 
-FFmpeg  (bundled through imageio-ffmpeg; joins separate audio and video streams and converts audio to MP3)
-  The bundled build is licensed under the GNU GPL v3 and runs as a separate program; Lavati Downloader only
-  starts it. Source code and licence: https://ffmpeg.org/download.html  https://github.com/imageio/imageio-ffmpeg
+FFmpeg  (downloaded by the app on first use from this project's GitHub release; joins separate audio and video
+  streams and converts audio to MP3). The build is licensed under the GNU GPL v3 and runs as a separate program;
+  Lavati Downloader only starts it. Source code and licence: https://ffmpeg.org/download.html  https://github.com/imageio/imageio-ffmpeg
 
 JetBrains Mono  (idm\gui\fonts)
   Copyright (c) JetBrains s.r.o. Licensed under the SIL Open Font License, Version 1.1.

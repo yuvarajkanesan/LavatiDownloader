@@ -10,7 +10,7 @@ import requests
 from idm.storage.paths import sanitize_filename
 
 DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (compatible; LavatiDownloader/0.1; +https://example.invalid)"
+    "Mozilla/5.0 (compatible; LavatiDownloader/0.1; +https://github.com/yuvarajkanesan/LavatiDownloader)"
 )
 DEFAULT_TIMEOUT = 15  # seconds, for probing only
 

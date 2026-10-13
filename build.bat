@@ -30,6 +30,9 @@ rem drop Qt files the app never loads: translations, QML, unused image/platform 
 set I=dist\Lavati Downloader\_internal\PySide6
 rmdir /s /q "%I%\translations" "%I%\qml" "%I%\plugins\generic" "%I%\plugins\networkinformation" "%I%\plugins\tls" "%I%\plugins\iconengines" 2>nul
 del /q "%I%\opengl32sw.dll" "%I%\Qt6Pdf.dll" "%I%\Qt6Qml*.dll" "%I%\Qt6Quick*.dll" "%I%\Qt6OpenGL*.dll" "%I%\Qt6Svg.dll" "%I%\Qt6VirtualKeyboard*.dll" 2>nul
+del /q "%I%\plugins\imageformats\qtiff.dll" "%I%\plugins\imageformats\qicns.dll" "%I%\plugins\imageformats\qpdf.dll" "%I%\plugins\imageformats\qsvg.dll" "%I%\plugins\imageformats\qtga.dll" "%I%\plugins\imageformats\qwbmp.dll" 2>nul
+rem the x64-named OpenSSL pair is an unused duplicate of libssl-3 / libcrypto-3 (checked: nothing imports it)
+del /q "dist\Lavati Downloader\_internal\libssl-3-x64.dll" "dist\Lavati Downloader\_internal\libcrypto-3-x64.dll" 2>nul
 del /q "%I%\plugins\platforms\qdirect2d.dll" "%I%\plugins\platforms\qminimal.dll" "%I%\plugins\platforms\qoffscreen.dll" 2>nul
 exit /b 0
 

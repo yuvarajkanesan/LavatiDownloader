@@ -2,15 +2,18 @@
 #define AppName "Lavati Downloader"
 #define AppVersion "0.2.0"
 #define AppExe "Lavati Downloader.exe"
-; where the "Support development" link points; change to your donation page
-#define FundingUrl "https://github.com/sponsors/your-github-username"
+#ifndef DistDir
+  #define DistDir "dist\Lavati Downloader"
+#endif
 
 [Setup]
 AppId={{7C4A9E21-5B3D-4F68-A1E7-92D0C6B8F135}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher=Lavati Softwares
-AppCopyright=Copyright (C) Lavati Softwares
+AppCopyright=Copyright (C) Lavati Softwares. MIT License.
+AppPublisherURL=https://github.com/yuvarajkanesan/LavatiDownloader
+AppSupportURL=https://github.com/yuvarajkanesan/LavatiDownloader/issues
 VersionInfoCompany=Lavati Softwares
 VersionInfoDescription=Lavati Downloader Setup
 VersionInfoProductName=Lavati Downloader
@@ -56,9 +59,11 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 Name: "autostart"; Description: "Start Lavati Downloader when I sign in to Windows"; GroupDescription: "Options:"; Flags: unchecked
 
 [Files]
-Source: "dist\Lavati Downloader\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "THIRD_PARTY_NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "PRIVACY.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "SECURITY.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
@@ -80,7 +85,6 @@ Type: filesandordirs; Name: "{app}\_internal"
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent
-Filename: "{#FundingUrl}"; Description: "Support development (open the funding page)"; Flags: shellexec nowait postinstall skipifsilent unchecked
 
 [Code]
 var
@@ -95,18 +99,11 @@ begin
     if CompareText(ParamStr(i), Name) = 0 then Result := True;
 end;
 
-procedure FundingLinkClick(Sender: TObject);
-var
-  Code: Integer;
-begin
-  ShellExec('open', '{#FundingUrl}', '', '', SW_SHOWNORMAL, ewNoWait, Code);
-end;
-
-{ A short "free and open source" page with a funding link, shown right after the license. }
+{ A short "free and open source" page, shown right after the license. }
 procedure InitializeWizard();
 var
   Page: TWizardPage;
-  Info, Link: TNewStaticText;
+  Info: TNewStaticText;
 begin
   Page := CreateCustomPage(wpLicense, 'Free and open source',
     '{#AppName} is MIT licensed and free to use.');
@@ -115,17 +112,8 @@ begin
   Info.WordWrap := True;
   Info.AutoSize := False;
   Info.Width := Page.SurfaceWidth;
-  Info.Height := ScaleY(110);
-  Info.Caption := 'There are no ads, no accounts and no tracking. Development is funded by people who find it useful.' + #13#10 + #13#10 +
-    'If {#AppName} saves you time, please consider supporting it. It is entirely optional.';
-  Link := TNewStaticText.Create(Page);
-  Link.Parent := Page.Surface;
-  Link.Top := Info.Top + Info.Height;
-  Link.Caption := 'Support development';
-  Link.Cursor := crHand;
-  Link.Font.Style := [fsUnderline];
-  Link.Font.Color := clHotLight;
-  Link.OnClick := @FundingLinkClick;
+  Info.Height := ScaleY(80);
+  Info.Caption := 'There are no ads, no accounts and no tracking. It is built in the open and anyone can read, change and share it.';
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

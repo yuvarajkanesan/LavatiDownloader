@@ -115,3 +115,17 @@ def test_torrents_mode_switches_pages_and_explains_missing_engine(qapp, tmp_path
     window._mode_tabs._buttons["downloads"].click()
     assert window._pages.currentWidget() is not window._torrents_page
     db.close()
+
+
+def test_window_centers_on_the_screen(qapp, tmp_path):
+    from PySide6.QtGui import QCursor, QGuiApplication
+    db, window = _make_window(tmp_path)
+    window.move(0, 0)
+    window.center_on_screen()
+    # it centers on the screen under the mouse (falls back to the primary one)
+    chosen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+    screen = chosen.availableGeometry()
+    center = window.frameGeometry().center()
+    assert abs(center.x() - screen.center().x()) <= 2
+    assert abs(center.y() - screen.center().y()) <= 2
+    db.close()
