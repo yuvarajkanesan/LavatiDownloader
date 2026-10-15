@@ -10,9 +10,11 @@ from PySide6.QtWidgets import (
 )
 
 from idm import browser_integration
+from idm.core import ffmpeg_tool
 from idm.core.schedule import ALL_DAYS, FINISH_ACTIONS, parse_hhmm
 from idm.core.video import QUALITY_TIERS, VideoOptions
 from idm.gui import autostart, theme
+from idm.gui.ffmpeg_prompt import download_with_progress
 from idm.gui.material_icons import get_icon
 from idm.gui.widgets import card, field_label, muted
 from idm.storage.repository import DownloadRepository
@@ -218,6 +220,19 @@ class SettingsPage(QWidget):
         self._uploader = self._check("Name files with the uploader and title", "video_name_uploader")
         for box in (self._clipboard, self._join, self._subs, self._uploader):
             layout.addWidget(box)
+        layout.addSpacing(4)
+        layout.addWidget(field_label("Video tool (ffmpeg)"))
+        tool_row = QHBoxLayout()
+        self._tool_status = QLabel()
+        self._tool_button = QPushButton("Download")
+        self._tool_button.setCursor(Qt.PointingHandCursor)
+        self._tool_button.clicked.connect(self._download_tool)
+        tool_row.addWidget(self._tool_status, 1)
+        tool_row.addWidget(self._tool_button)
+        layout.addLayout(tool_row)
+        layout.addWidget(muted("Joins separate video and audio (needed for YouTube and any high quality) and makes MP3s. "
+                               "Downloaded once and kept on this PC."))
+        self._refresh_tool()
 
     def _build_speed(self) -> None:
         layout = self._section("Speed and connections", "Each file is split into segments that download in parallel.")
@@ -315,6 +330,24 @@ class SettingsPage(QWidget):
         layout.addLayout(buttons)
 
     # -- handlers ---------------------------------------------------------------------
+
+    def _refresh_tool(self) -> None:
+        installed = ffmpeg_tool.ffmpeg_path()
+        self._tool_status.setText("Installed" if installed else "Not installed")
+        self._tool_status.setStyleSheet(f"color: {theme.SUCCESS if installed else '#B06000'}; font-weight: 600;")
+        self._tool_button.setEnabled(not installed)  # the button is live exactly when the tool is missing
+        self._tool_button.setText("Installed" if installed else "Download")
+
+    def _download_tool(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        error = download_with_progress(self)
+        if error and error != "cancelled":
+            QMessageBox.warning(self, "Video tool", error)
+        self._refresh_tool()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._refresh_tool()
 
     def _browse_root(self) -> None:
         chosen = QFileDialog.getExistingDirectory(self, "Choose folder", self._root_edit.text())

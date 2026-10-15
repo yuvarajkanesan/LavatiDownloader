@@ -24,7 +24,7 @@ class _Worker(QObject):
 
     def _run(self) -> None:
         try:
-            ffmpeg_tool.download_ffmpeg(progress=lambda d, t: self.progress.emit(d, t), cancel=self.cancel)
+            ffmpeg_tool.download_ffmpeg_any(progress=lambda d, t: self.progress.emit(d, t), cancel=self.cancel)
         except ffmpeg_tool.FfmpegDownloadError as exc:
             self.done.emit(str(exc))
             return
@@ -52,6 +52,18 @@ def ensure_ffmpeg(parent: QWidget, options: VideoOptions) -> bool:
     if box.clickedButton() is skip:
         return not audio
 
+    error = download_with_progress(parent)
+    if not error:
+        return True
+    if error != "cancelled":
+        QMessageBox.warning(parent, "Video tool", f"{error}\n\n"
+                            + ("MP3 downloads need it, so this one was not started." if audio
+                               else "Videos that come as a single file can still be saved; YouTube videos usually can't."))
+    return not audio
+
+
+def download_with_progress(parent: QWidget) -> str:
+    """Download ffmpeg behind a progress dialog. Returns "" on success, "cancelled", or the error text."""
     dialog = QProgressDialog("Downloading video tool...", "Cancel", 0, 100, parent)
     dialog.setWindowTitle("Lavati Downloader")
     dialog.setWindowModality(Qt.WindowModal)
@@ -77,11 +89,4 @@ def ensure_ffmpeg(parent: QWidget, options: VideoOptions) -> bool:
     dialog.show()
     loop.exec()
     dialog.close()
-    error = result["error"]
-    if not error:
-        return True
-    if error != "cancelled":
-        QMessageBox.warning(parent, "Video tool", f"{error}\n\n"
-                            + ("MP3 downloads need it, so this one was not started." if audio
-                               else "Videos that come as a single file can still be saved; YouTube videos usually can't."))
-    return not audio
+    return result["error"] or ""

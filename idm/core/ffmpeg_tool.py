@@ -14,6 +14,7 @@ import shutil
 import sys
 import tempfile
 import threading
+import zipfile
 from pathlib import Path
 from typing import Callable
 
@@ -25,6 +26,11 @@ from idm.storage.paths import user_data_dir
 FFMPEG_URL = "https://github.com/yuvarajkanesan/LavatiDownloader/releases/download/ffmpeg-7.1/ffmpeg-win64.exe.xz"
 FFMPEG_XZ_SHA256 = "b59354d99090023ec94e319c538406b00aaf20d64c26a6acc64621b0199bfcf2"  # set by make_ffmpeg_asset.py
 FFMPEG_DOWNLOAD_MB = 21  # shown in the prompt
+# used when the release above is unavailable: the public Windows build the asset was made from. Its SHA-256 is
+# published next to the zip, so the download is still verified (against the same host over HTTPS).
+FALLBACK_ZIP_URL = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+FALLBACK_SHA_URL = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip.sha256"
+FALLBACK_DOWNLOAD_MB = 100
 
 CHUNK = 256 * 1024
 
@@ -109,3 +115,85 @@ def download_ffmpeg(
                 leftover.unlink()
             except OSError:
                 pass
+
+
+def download_ffmpeg_fallback(
+    progress: Callable[[int, int], None] | None = None,
+    cancel: threading.Event | None = None,
+    zip_url: str = FALLBACK_ZIP_URL,
+    sha_url: str = FALLBACK_SHA_URL,
+    dest_dir: Path | None = None,
+    session: requests.Session | None = None,
+) -> Path:
+    """Same result as download_ffmpeg from the public build's zip (bin/ffmpeg.exe is pulled out of it)."""
+    dest = Path(dest_dir) if dest_dir else tools_dir()
+    dest.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(suffix=".zip", dir=dest)
+    os.close(fd)
+    tmp = Path(tmp_name)
+    exe_tmp = dest / "ffmpeg.exe.part"
+    getter = session or requests
+    try:
+        try:
+            reply = getter.get(sha_url, timeout=30)
+            reply.raise_for_status()
+            expected = reply.text.split()[0].strip().lower()
+            response = getter.get(zip_url, stream=True, timeout=30)
+            response.raise_for_status()
+            total = int(response.headers.get("Content-Length") or 0)
+            digest = hashlib.sha256()
+            done = 0
+            with open(tmp, "wb") as out:
+                for chunk in response.iter_content(CHUNK):
+                    if cancel is not None and cancel.is_set():
+                        raise FfmpegDownloadError("cancelled")
+                    out.write(chunk)
+                    digest.update(chunk)
+                    done += len(chunk)
+                    if progress:
+                        progress(done, total)
+        except (requests.RequestException, IndexError) as exc:
+            raise FfmpegDownloadError(f"could not download the video tool: {exc}") from exc
+        if digest.hexdigest() != expected:
+            raise FfmpegDownloadError("the downloaded file does not match the published checksum")
+        try:
+            with zipfile.ZipFile(tmp) as archive:
+                member = next((n for n in archive.namelist() if n.lower().endswith("bin/ffmpeg.exe")), None)
+                if member is None:
+                    raise FfmpegDownloadError("ffmpeg.exe was not found in the downloaded archive")
+                with archive.open(member) as src, open(exe_tmp, "wb") as out:
+                    shutil.copyfileobj(src, out, CHUNK)
+        except (zipfile.BadZipFile, OSError) as exc:
+            raise FfmpegDownloadError(f"could not unpack the video tool: {exc}") from exc
+        final = dest / "ffmpeg.exe"
+        os.replace(exe_tmp, final)
+        return final
+    finally:
+        for leftover in (tmp, exe_tmp):
+            try:
+                leftover.unlink()
+            except OSError:
+                pass
+
+
+def download_ffmpeg_any(progress=None, cancel=None, dest_dir: Path | None = None) -> Path:
+    """The project's release first, then the public build if that fails (not when the user cancelled)."""
+    try:
+        return download_ffmpeg(progress=progress, cancel=cancel, dest_dir=dest_dir)
+    except FfmpegDownloadError as first:
+        if str(first) == "cancelled" or (cancel is not None and cancel.is_set()):
+            raise
+        try:
+            return download_ffmpeg_fallback(progress=progress, cancel=cancel, dest_dir=dest_dir)
+        except FfmpegDownloadError as second:
+            if str(second) == "cancelled":
+                raise
+            raise FfmpegDownloadError(f"{first}\n\nThe backup source failed too: {second}") from second
+
+
+def remove_ffmpeg() -> bool:
+    path = installed_path()
+    if not path:
+        return False
+    path.unlink()
+    return True

@@ -129,3 +129,16 @@ def test_window_centers_on_the_screen(qapp, tmp_path):
     assert abs(center.x() - screen.center().x()) <= 2
     assert abs(center.y() - screen.center().y()) <= 2
     db.close()
+
+
+def test_video_tool_button_is_enabled_only_when_ffmpeg_is_missing(qapp, tmp_path, monkeypatch):
+    from idm.core import ffmpeg_tool
+    db, window = _make_window(tmp_path)
+    page = window._settings_page
+    monkeypatch.setattr(ffmpeg_tool, "ffmpeg_path", lambda: None)
+    page._refresh_tool()
+    assert page._tool_button.isEnabled() and page._tool_status.text() == "Not installed"
+    monkeypatch.setattr(ffmpeg_tool, "ffmpeg_path", lambda: r"C:\x\ffmpeg.exe")
+    page._refresh_tool()
+    assert not page._tool_button.isEnabled() and page._tool_status.text() == "Installed"
+    db.close()
