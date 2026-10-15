@@ -59,7 +59,16 @@ class VideoTask:
             if self._pause.is_set() or self._cancel.is_set() or isinstance(exc, _Interrupted):
                 self._after_interrupt()
             else:
-                self._set_status(DownloadStatus.FAILED, error_message=_clean(str(exc)))
+                self._set_status(DownloadStatus.FAILED, error_message=self._explain(_clean(str(exc))))
+
+    @staticmethod
+    def _explain(message: str) -> str:
+        """Most sites (YouTube above all) only offer video and audio as separate streams, which need ffmpeg to join."""
+        from idm.core.video import ffmpeg_path
+        if "format is not available" in message and not ffmpeg_path():
+            return ("This video needs the ffmpeg video tool, which isn't installed yet. "
+                    "Add the link again and choose Download when asked to get it.")
+        return message
 
     def pause(self) -> None:
         self._pause.set()

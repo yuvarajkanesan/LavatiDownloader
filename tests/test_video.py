@@ -180,3 +180,18 @@ def test_old_database_gets_new_columns(tmp_path):
     (rec,) = repo.list_downloads()
     assert rec.kind == "file" and rec.source == "Direct link" and rec.options is None
     db.close()
+
+
+def test_missing_format_without_ffmpeg_gives_an_actionable_message(repo, tmp_path, monkeypatch):
+    import idm.core.video as video
+    monkeypatch.setattr(video, "ffmpeg_path", lambda: None)
+    rec = _make_record(repo, tmp_path)
+    events = []
+
+    class NoFormat(FakeYDL):
+        def extract_info(self, url, download=True):
+            raise RuntimeError("ERROR: [youtube] x: Requested format is not available. Use --list-formats")
+
+    VideoTask(rec, repo, events.append, ydl_factory=NoFormat).start()
+    assert events[-1].status == DownloadStatus.FAILED
+    assert "ffmpeg" in events[-1].error_message and "choose Download" in events[-1].error_message

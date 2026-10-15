@@ -43,8 +43,8 @@ def ensure_ffmpeg(parent: QWidget, options: VideoOptions) -> bool:
     box.setText(f"Saving {'audio as MP3' if audio else 'this video in high quality'} needs a small helper "
                 f"program (ffmpeg, about {ffmpeg_tool.FFMPEG_DOWNLOAD_MB} MB).")
     box.setInformativeText("It is downloaded once from this project's GitHub release, checked, and kept on your PC."
-                           + ("" if audio else " If you skip it, the video is saved in the best single-file "
-                                               "quality instead (usually lower)."))
+                           + ("" if audio else " If you skip it, only videos that come as a single file can be saved "
+                                               "(YouTube videos usually can't)."))
     download = box.addButton("Download", QMessageBox.AcceptRole)
     skip = box.addButton("Cancel" if audio else "Skip", QMessageBox.RejectRole)
     box.setDefaultButton(download)
@@ -83,5 +83,5 @@ def ensure_ffmpeg(parent: QWidget, options: VideoOptions) -> bool:
     if error != "cancelled":
         QMessageBox.warning(parent, "Video tool", f"{error}\n\n"
                             + ("MP3 downloads need it, so this one was not started." if audio
-                               else "The video will be saved in the best single-file quality instead."))
+                               else "Videos that come as a single file can still be saved; YouTube videos usually can't."))
     return not audio
