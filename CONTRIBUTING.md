@@ -9,7 +9,7 @@ license.
    (`idm/core`, `idm/storage`) has no Qt dependency and is easy to test.
 4. Keep changes focused and match the surrounding style. Open a pull request describing what and why.
 
-Good first areas: a libtorrent backend for the Torrents screen (`idm/core/torrent.py` is the interface), macOS and
-Linux packaging, more video sites' quality handling.
+Good first areas: macOS and Linux packaging, torrent speed limits and seeding rules, more video sites' quality
+handling. Use Python 3.11-3.13 (libtorrent has no 3.14 build yet).
 
 Please do not add features whose main purpose is bypassing DRM or paywalls.

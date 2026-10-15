@@ -20,8 +20,8 @@ def test_record_math():
 def test_magnet_detection_and_null_backend():
     assert is_magnet("  magnet:?xt=urn:btih:abc")
     assert not is_magnet("https://example.com/a.torrent")
-    backend = load_backend()
-    assert isinstance(backend, NullBackend) and not backend.available and backend.snapshot() == []
+    backend = NullBackend()
+    assert not backend.available and backend.snapshot() == [] and backend.detail("x") is None
 
 
 def test_page_filters_by_group_and_shows_detail(qapp):
@@ -59,3 +59,97 @@ def test_pieces_grid_bins_when_pieces_outnumber_cells(qapp):
     assert cells[0] == 1.0 and cells[-1] == 0.0
     grid.set_pieces([True, False])
     assert grid.cells()[:2] == [1.0, 0.0]
+
+
+# ---- the Add torrent sheet and the main window against the real engine over loopback ----
+
+import os
+import time
+import warnings
+
+import pytest
+
+lt = pytest.importorskip("libtorrent")
+
+from PySide6.QtCore import Qt  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
+
+from idm.core.torrent_engine import LibtorrentBackend  # noqa: E402
+from idm.gui.add_torrent_dialog import AddTorrentDialog  # noqa: E402
+
+LOCAL = {"listen_interfaces": "127.0.0.1:0", "enable_dht": False, "enable_lsd": False, "enable_upnp": False,
+         "enable_natpmp": False}
+
+
+@pytest.fixture
+def torrent_file(tmp_path):
+    folder = tmp_path / "data" / "Pack"
+    folder.mkdir(parents=True)
+    (folder / "one.bin").write_bytes(os.urandom(100_000))
+    (folder / "two.bin").write_bytes(os.urandom(60_000))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        storage = lt.file_storage()
+        lt.add_files(storage, str(folder))
+        torrent = lt.create_torrent(storage, piece_size=16384, flags=lt.create_torrent.v1_only)
+        lt.set_piece_hashes(torrent, str(tmp_path / "data"))
+    path = tmp_path / "pack.torrent"
+    path.write_bytes(lt.bencode(torrent.generate()))
+    return path, tmp_path / "data"
+
+
+def test_add_sheet_lists_files_updates_total_and_commits(qapp, tmp_path, torrent_file):
+    path, data = torrent_file
+    backend = LibtorrentBackend(tmp_path / "state", settings=LOCAL)
+    pid = backend.preview_file(str(path), str(data))
+    dialog = AddTorrentDialog(backend, pid, str(data))
+    dialog.show()
+    assert dialog._preview.ready and dialog._files.rowCount() == 2
+    assert dialog._add.isEnabled() and "160" in dialog._total.text().replace(" ", "") or "156" in dialog._total.text()
+    dialog._files.item(1, 0).setCheckState(Qt.Unchecked)  # drop two.bin
+    assert dialog._selected() == [0] and dialog._add.text().startswith("Add")
+    dialog._set_all(False)
+    assert not dialog._add.isEnabled()
+    dialog._set_all(True)
+    dialog._mode.set_value("order")
+    dialog.accept()
+    assert [r.name for r in backend.snapshot()] == ["Pack"]
+    backend.shutdown()
+
+
+def test_add_sheet_closed_without_adding_forgets_the_torrent(qapp, tmp_path, torrent_file):
+    path, data = torrent_file
+    backend = LibtorrentBackend(tmp_path / "state", settings=LOCAL)
+    pid = backend.preview_file(str(path), str(data))
+    dialog = AddTorrentDialog(backend, pid, str(data))
+    dialog.reject()
+    assert backend.snapshot() == [] and backend.preview(pid) is None
+    backend.shutdown()
+
+
+def test_files_tab_priority_picker_reports_changes(qapp, tmp_path, torrent_file):
+    path, data = torrent_file
+    backend = LibtorrentBackend(tmp_path / "state", settings=LOCAL)
+    pid = backend.preview_file(str(path), str(data))
+    backend.commit_preview(pid, [0, 1], False, str(data))
+    page = TorrentsPage()
+    page.resize(1000, 800)
+    page.show()
+    page.detail_provider = backend.detail
+    seen = []
+    page.file_priority_requested.connect(lambda *a: seen.append(a))
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and not backend.snapshot():
+        time.sleep(0.1)
+    page.set_records(backend.snapshot())
+    page.table.selectRow(0)
+    assert page.files_table.rowCount() == 2
+    combo = page.files_table.cellWidget(1, 3)
+    combo.setCurrentIndex(0)  # Skip
+    assert seen and seen[-1][1:] == (1, 0)
+    backend.set_file_priority(*seen[-1])
+    deadline = time.monotonic() + 5  # libtorrent applies it on its own thread
+    while time.monotonic() < deadline and backend.detail(pid).files[1].priority != 0:
+        time.sleep(0.05)
+    assert backend.detail(pid).files[1].priority == 0
+    backend.shutdown()

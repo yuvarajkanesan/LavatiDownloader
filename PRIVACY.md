@@ -13,3 +13,7 @@ Lavati Downloader has no accounts, no ads, no telemetry, no analytics and no upd
   when you press its Download button or when it captures a download you started, and sends it to the app.
   It does not see page contents and sends nothing over the internet.
 - **Uninstall** offers to delete the stored list and settings. Downloaded files are never deleted.
+- **Torrents.** BitTorrent is peer to peer: while a torrent downloads or seeds, other peers, trackers and the DHT
+  network can see your IP address and which torrent you share. Use a VPN if that matters to you. The app listens
+  on port 6881 for incoming peers (Windows may ask to allow it through the firewall) and opens ports with UPnP when
+  your router supports it. Torrent progress is kept in `%LOCALAPPDATA%\idm-downloader\IDM Downloader	orrents`.

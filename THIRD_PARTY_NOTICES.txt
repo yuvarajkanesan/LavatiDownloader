@@ -24,3 +24,6 @@ FFmpeg  (downloaded by the app on first use from this project's GitHub release; 
 JetBrains Mono  (idm\gui\fonts)
   Copyright (c) JetBrains s.r.o. Licensed under the SIL Open Font License, Version 1.1.
   https://github.com/JetBrains/JetBrainsMono   License text: https://openfontlicense.org
+
+libtorrent  (the torrent engine)
+  BSD 3-Clause License. Copyright (c) Arvid Norberg. https://libtorrent.org

@@ -9,6 +9,7 @@ so the dialog never opened. Calling the method directly (as other tests do) neve
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
+from idm.core.torrent import NullBackend
 from idm.gui.main_window import MainWindow
 from idm.storage.db import Database
 from idm.storage.repository import DownloadRepository
@@ -16,7 +17,7 @@ from idm.storage.repository import DownloadRepository
 
 def _make_window(tmp_path):
     db = Database(tmp_path / "test.sqlite3")
-    window = MainWindow(DownloadRepository(db))
+    window = MainWindow(DownloadRepository(db), NullBackend())
     window._manager.stop_queue()  # these tests only care about the UI
     window._queue_schedule.stop()
     window._ipc.stop()
@@ -65,7 +66,7 @@ def test_sidebar_filters_and_counts(qapp, tmp_path):
         repo.create_download(DownloadRecord(id=None, url=f"https://x/{name}", filename=name,
                                             destination_path=f"/tmp/{name}", category=category,
                                             total_size=10, status=status))
-    window = MainWindow(repo)
+    window = MainWindow(repo, NullBackend())
     window._manager.stop_queue()
     window._queue_schedule.stop()
     window._ipc.stop()

@@ -17,6 +17,8 @@ dependencies = [
     "PySide6>=6.6",
     "platformdirs>=4.0",
     "yt-dlp>=2025.1.1",
+    # the torrent engine; no release for Python 3.14 yet, where the Torrents screen explains it is unavailable
+    "libtorrent>=2.0.9; python_version < '3.14'",
 ]
 
 [project.urls]

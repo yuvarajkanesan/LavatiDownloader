@@ -4,6 +4,8 @@ rem Code signing: set SIGN_CERT_SHA1=<thumbprint> (or SIGN_PFX + SIGN_PFX_PASSWO
 setlocal
 cd /d "%~dp0"
 set PY=.venv\Scripts\python.exe
+rem libtorrent (torrents) has no Python 3.14 build, so a .venv313 (Python 3.13) takes priority when it exists
+if exist .venv313\Scripts\python.exe set PY=.venv313\Scripts\python.exe
 %PY% -m pip install --quiet -e ".[dev,build]" || goto :err
 %PY% -m pytest -q || goto :err
 %PY% -m PyInstaller "Lavati Downloader.spec" --noconfirm --clean || goto :err

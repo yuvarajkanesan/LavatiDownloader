@@ -5,11 +5,11 @@ from __future__ import annotations
 from PySide6.QtCore import QAbstractTableModel, QEvent, QModelIndex, QRect, QRectF, QSize, QSortFilterProxyModel, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
 from PySide6.QtWidgets import (
-    QAbstractItemView, QFrame, QHBoxLayout, QHeaderView, QLabel, QPushButton, QStackedWidget,
+    QAbstractItemView, QComboBox, QFrame, QHBoxLayout, QHeaderView, QLabel, QPushButton, QStackedWidget,
     QTableView, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
-from idm.core.torrent import TorrentRecord, TorrentState
+from idm.core.torrent import PRIORITY_HIGH, PRIORITY_NORMAL, PRIORITY_SKIP, TorrentRecord, TorrentState
 from idm.gui import theme
 from idm.gui.delegates import BUTTON, ROW_HEIGHT, TextDelegate, button_rects
 from idm.gui.downloads_model import format_bytes, format_eta
@@ -23,20 +23,22 @@ HEADERS = ["Name", "Size", "Progress", "Down", "Up", "Seeds / peers", "Ratio", "
 ROLE_TORRENT = Qt.UserRole
 
 STATE_LABEL = {
-    TorrentState.DOWNLOADING: "Downloading", TorrentState.SEEDING: "Seeding", TorrentState.PAUSED: "Paused",
+    TorrentState.METADATA: "Fetching info", TorrentState.DOWNLOADING: "Downloading", TorrentState.SEEDING: "Seeding", TorrentState.PAUSED: "Paused",
     TorrentState.CHECKING: "Checking", TorrentState.ERROR: "Error",
 }
 STATE_PILL = {
+    TorrentState.METADATA: (theme.TEXT_MUTED, "#EEF0F4"),
     TorrentState.DOWNLOADING: (theme.PRIMARY, "#E6EDFF"), TorrentState.SEEDING: (TEAL, TEAL_BG),
     TorrentState.PAUSED: ("#B06000", theme.WARNING_BG), TorrentState.CHECKING: (theme.TEXT_MUTED, "#EEF0F4"),
     TorrentState.ERROR: (theme.ERROR, theme.ERROR_BG),
 }
 STATE_BAR = {
+    TorrentState.METADATA: theme.NEUTRAL_LIGHT,
     TorrentState.DOWNLOADING: theme.PRIMARY, TorrentState.SEEDING: TEAL, TorrentState.PAUSED: theme.WARNING,
     TorrentState.CHECKING: theme.NEUTRAL_LIGHT, TorrentState.ERROR: theme.ERROR,
 }
 GROUPS = {
-    "downloading": {TorrentState.DOWNLOADING},
+    "downloading": {TorrentState.DOWNLOADING, TorrentState.METADATA, TorrentState.CHECKING},
     "seeding": {TorrentState.SEEDING},
     "paused": {TorrentState.PAUSED},
 }
@@ -309,9 +311,11 @@ class TorrentsPage(QWidget):
     action_requested = Signal(str, str)  # torrent id, "pause" | "resume" | "remove"
     resume_all = Signal()
     pause_all = Signal()
+    file_priority_requested = Signal(str, int, int)  # torrent id, file index, priority
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.detail_provider = None  # callable(id) -> a fully filled TorrentRecord, set by the owner
         layout = QVBoxLayout(self)
         layout.setContentsMargins(22, 20, 22, 16)
         layout.setSpacing(14)
@@ -424,7 +428,7 @@ class TorrentsPage(QWidget):
         self.saved_to.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 12px;")
         ov.addWidget(self.saved_to)
         self.tabs.addWidget(overview)
-        self.files_table = self._simple_table(["File", "Size", "Done"])
+        self.files_table = self._simple_table(["File", "Size", "Done", "Priority"])
         self.peers_table = self._simple_table(["Address", "Client", "Done", "Down", "Up"])
         self.trackers_table = self._simple_table(["Tracker", "Status", "Seeds", "Peers"])
         for table in (self.files_table, self.peers_table, self.trackers_table):
@@ -441,6 +445,7 @@ class TorrentsPage(QWidget):
         table.verticalHeader().setVisible(False)
         table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         table.setShowGrid(False)
+        table.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         table.horizontalHeader().setStretchLastSection(True)
         table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         table.setMinimumHeight(150)
@@ -450,6 +455,37 @@ class TorrentsPage(QWidget):
         for i, button in enumerate(self.tab_buttons):
             button.setChecked(i == index)
         self.tabs.setCurrentIndex(index)
+
+    PRIORITY_CHOICES = (("Skip", PRIORITY_SKIP), ("Normal", PRIORITY_NORMAL), ("High", PRIORITY_HIGH))
+
+    def _fill_files(self, t: TorrentRecord) -> None:
+        """Update the files table in place: rebuilding it every second would close an open priority drop-down."""
+        table = self.files_table
+        same = table.rowCount() == len(t.files) and getattr(self, "_files_for", None) == t.id
+        if not same:
+            table.setRowCount(len(t.files))
+            self._files_for = t.id
+        for row, f in enumerate(t.files):
+            for col, text in enumerate((f.path.replace("\\", "/"), format_bytes(f.size), f"{f.progress * 100:.0f}%")):
+                item = table.item(row, col)
+                if item is None:
+                    table.setItem(row, col, QTableWidgetItem(text))
+                else:
+                    item.setText(text)
+            combo = table.cellWidget(row, 3)
+            if combo is None:
+                combo = QComboBox()
+                combo.setMaximumWidth(120)
+                for label, value in self.PRIORITY_CHOICES:
+                    combo.addItem(label, value)
+                combo.currentIndexChanged.connect(
+                    lambda _i, c=combo, tid=t.id, idx=f.index: self.file_priority_requested.emit(tid, idx, c.currentData()))
+                table.setCellWidget(row, 3, combo)
+            if not combo.view().isVisible():
+                combo.blockSignals(True)
+                combo.setCurrentIndex(max(0, combo.findData(f.priority)) if f.priority in (0, 4, 7)
+                                      else 1 if f.priority < 7 else 2)
+                combo.blockSignals(False)
 
     @staticmethod
     def _fill(table: QTableWidget, rows: list[list[str]]) -> None:
@@ -467,6 +503,8 @@ class TorrentsPage(QWidget):
         if t is None:
             self.detail.hide()
             return
+        if self.detail_provider is not None:
+            t = self.detail_provider(t.id) or t
         self.detail.show()
         self.detail_name.setText(t.name)
         self.tile_downloaded.value.setText(format_bytes(t.downloaded))
@@ -475,7 +513,7 @@ class TorrentsPage(QWidget):
         self.tile_eta.value.setText(format_eta(t.eta_seconds) if t.eta_seconds is not None else "-")
         self.pieces.set_pieces(t.pieces, STATE_BAR[t.state] if t.state != TorrentState.SEEDING else theme.PRIMARY)
         self.saved_to.setText(f"Saved to {t.save_path}" if t.save_path else "")
-        self._fill(self.files_table, [[f.path, format_bytes(f.size), f"{f.progress * 100:.0f}%"] for f in t.files])
+        self._fill_files(t)
         self._fill(self.peers_table, [[p.address, p.client, f"{p.progress * 100:.0f}%", speed_text(p.down_speed),
                                        speed_text(p.up_speed)] for p in t.peer_list])
         self._fill(self.trackers_table, [[k.url, k.status, str(k.seeds), str(k.peers)] for k in t.trackers])

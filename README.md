@@ -8,6 +8,7 @@ A multi-connection download accelerator built with Python and PySide6 (Windows i
 ## Features
 
 - **Video and social links** (YouTube, Instagram, Facebook, TikTok, X) through yt-dlp: Video (MP4) or Audio only (MP3), quality from 360p to 2160p with size estimates, subtitles, whole playlists. Separate audio and video streams are joined with ffmpeg, which the app downloads once on first use (it is not in the installer)
+- **Torrents**: magnet links and .torrent files through libtorrent, with an Add torrent sheet (pick files, start now or download in order), seeding, per-file priority, peers and trackers
 - **Scheduler**: run the queue between a start and stop time on chosen days, then do nothing, exit, sleep or shut down
 - **Browser integration** (Chrome and Edge): a Download button on video pages and capture of file downloads, through a native-messaging host
 
@@ -39,6 +40,7 @@ tests/
 The engine (`idm/core`, `idm/storage`) has no dependency on Qt and is fully unit-testable on its own; the GUI is a thin adapter on top (see `idm/gui/bridge.py`).
 
 ## Setup
+Use Python 3.11 to 3.13 (libtorrent, the torrent engine, has no Python 3.14 build yet; on 3.14 everything else works and the Torrents screen says the engine is unavailable).
 
 ```
 python -m venv .venv

@@ -23,6 +23,7 @@ from idm.core.torrent import is_magnet, load_backend
 from idm.core.video import SITES, VideoOptions
 from idm.gui import autostart, theme
 from idm.gui.add_download_dialog import AddDownloadDialog
+from idm.gui.add_torrent_dialog import AddTorrentDialog
 from idm.gui.bridge import EngineBridge
 from idm.gui.clipboard_monitor import ClipboardMonitor
 from idm.gui.ffmpeg_prompt import ensure_ffmpeg
@@ -76,7 +77,7 @@ class _Notifier(QObject):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, repo: DownloadRepository):
+    def __init__(self, repo: DownloadRepository, torrent_backend=None):
         super().__init__()
         self.setWindowTitle("Lavati Downloader")
         self.setWindowIcon(make_app_icon())
@@ -109,7 +110,7 @@ class MainWindow(QMainWindow):
         self._bridge.event_received.connect(self._on_engine_event)
         self._manager.add_listener(self._bridge.listener)
 
-        self._torrents = load_backend()
+        self._torrents = torrent_backend if torrent_backend is not None else load_backend()
         self._mode = "downloads"
         self._torrent_totals = (0, 0, 0)
         self._model = DownloadsTableModel(self)
@@ -164,6 +165,8 @@ class MainWindow(QMainWindow):
         self._pages.addWidget(self._settings_page)
         self._torrents_page = TorrentsPage()
         self._torrents_page.action_requested.connect(self._on_torrent_action)
+        self._torrents_page.detail_provider = self._torrents.detail
+        self._torrents_page.file_priority_requested.connect(self._torrents.set_file_priority)
         self._torrents_page.resume_all.connect(lambda: self._torrent_bulk("resume"))
         self._torrents_page.pause_all.connect(lambda: self._torrent_bulk("pause"))
         self._pages.addWidget(self._torrents_page)
@@ -517,20 +520,46 @@ class MainWindow(QMainWindow):
         if not is_magnet(text):
             QMessageBox.information(self, "Magnet link needed", "Paste a magnet link (it starts with magnet:?).")
             return
-        self._link_edit.clear()
-        self._torrents.add_magnet(text, str(self._downloads_root / "Torrents"))
-        self._refresh_torrents()
+        self._start_torrent_sheet(lambda save_dir: self._torrents.preview_magnet(text, save_dir), clear_link=True)
 
     def _open_torrent_file(self) -> None:
         if self._torrents_unavailable():
             return
         path, _filter = QFileDialog.getOpenFileName(self, "Open .torrent file", "", "Torrent files (*.torrent)")
         if path:
-            self._torrents.add_file(path, str(self._downloads_root / "Torrents"))
-            self._refresh_torrents()
+            self._start_torrent_sheet(lambda save_dir: self._torrents.preview_file(path, save_dir))
+
+    def _start_torrent_sheet(self, make_preview, clear_link: bool = False) -> None:
+        save_dir = str(self._downloads_root / "Torrents")
+        try:
+            preview_id = make_preview(save_dir)
+        except ValueError as exc:  # already in the list
+            QMessageBox.information(self, "Torrents", str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001 - a malformed magnet link or .torrent file
+            QMessageBox.warning(self, "Torrents", f"That isn't a valid torrent: {exc}")
+            return
+        if clear_link:
+            self._link_edit.clear()
+        AddTorrentDialog(self._torrents, preview_id, save_dir, self).exec()
+        self._refresh_torrents()
 
     def _on_torrent_action(self, torrent_id: str, action: str) -> None:
-        getattr(self._torrents, action)(torrent_id)
+        if action == "remove":
+            box = QMessageBox(self)
+            box.setWindowTitle("Remove torrent")
+            box.setIcon(QMessageBox.Question)
+            box.setText("Remove this torrent from the list?")
+            keep = box.addButton("Remove, keep files", QMessageBox.AcceptRole)
+            wipe = box.addButton("Remove and delete files", QMessageBox.DestructiveRole)
+            box.addButton(QMessageBox.Cancel)
+            box.exec()
+            if box.clickedButton() is keep:
+                self._torrents.remove(torrent_id)
+            elif box.clickedButton() is wipe:
+                self._torrents.remove(torrent_id, delete_files=True)
+        else:
+            getattr(self._torrents, action)(torrent_id)
         self._refresh_torrents()
 
     def _torrent_bulk(self, action: str) -> None:
@@ -616,6 +645,10 @@ class MainWindow(QMainWindow):
 
     def _add_from_link_bar(self) -> None:
         if self._mode == "torrents":
+            self._add_magnet()
+            return
+        if is_magnet(self._link_edit.text()):  # a magnet link pasted in Downloads belongs to the Torrents screen
+            self._set_mode("torrents")
             self._add_magnet()
             return
         text = self._link_edit.text().strip()
@@ -886,6 +919,7 @@ class MainWindow(QMainWindow):
         self._scheduler.stop()
         self._queue_schedule.stop()
         self._ipc.stop()
+        self._torrents.shutdown()
         self._manager.stop_queue()
         self._control_executor.shutdown(wait=False)
         QApplication.instance().quit()
